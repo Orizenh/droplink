@@ -52,6 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Download all files listener
   btnDownloadAll.addEventListener('click', downloadAllFiles);
+
+  // Register PWA Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+      .catch((err) => console.error('Service Worker registration failed:', err));
+  }
 });
 
 // Fetch Transfer Details (Initial check)
