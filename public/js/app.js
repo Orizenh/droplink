@@ -1,5 +1,5 @@
 import { formatBytes, getFileIcon } from './modules/utils.js';
-import { createTransfer } from './modules/api.js';
+import { createTransfer, deleteTransfer } from './modules/api.js';
 
 // Global state for selected files
 let selectedFiles = [];
@@ -243,6 +243,7 @@ function handleUploadSuccess(response, title) {
   saveToHistory({
     id: response.transferId,
     title: title,
+    deleteToken: response.deleteToken,
     hasPassword: passwordToggle.checked,
     endDate: endDateInput.value ? new Date(endDateInput.value).toISOString() : null,
     startDate: startDateInput.value ? new Date(startDateInput.value).toISOString() : null,
@@ -292,11 +293,27 @@ function saveToHistory(transfer) {
   localStorage.setItem('droplink_history', JSON.stringify(history));
 }
 
-function deleteHistoryItem(id) {
+async function deleteHistoryItem(id) {
   let history = JSON.parse(localStorage.getItem('droplink_history') || '[]');
-  history = history.filter(item => item.id !== id);
-  localStorage.setItem('droplink_history', JSON.stringify(history));
-  loadHistory();
+  const item = history.find(item => item.id === id);
+  const deleteToken = item ? item.deleteToken : '';
+
+  if (confirm("Voulez-vous vraiment supprimer définitivement ce transfert et ses fichiers du serveur ?")) {
+    try {
+      await deleteTransfer(id, deleteToken);
+    } catch (err) {
+      console.error('Failed to delete transfer from server:', err);
+      // Allow deletion from local history if the item was already deleted on server (404)
+      if (!err.message.includes('404')) {
+        alert(`Erreur lors de la suppression sur le serveur : ${err.message}`);
+        return;
+      }
+    }
+
+    history = history.filter(item => item.id !== id);
+    localStorage.setItem('droplink_history', JSON.stringify(history));
+    loadHistory();
+  }
 }
 
 function loadHistory() {

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -155,6 +156,8 @@ func CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		passwordHash = &h
 	}
 
+	deleteToken := uuid.New().String()
+
 	transfer := database.Transfer{
 		ID:           transferId,
 		Title:        strings.TrimSpace(title),
@@ -165,6 +168,7 @@ func CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		EndDate:      endDate,
 		CreatedAt:    time.Now(),
 		Files:        files,
+		DeleteToken:  deleteToken,
 	}
 
 	err = database.SaveTransfer(transfer)
@@ -174,9 +178,10 @@ func CreateTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
-		"success":    true,
-		"transferId": transferId,
-		"url":        "/link/" + transferId,
+		"success":     true,
+		"transferId":  transferId,
+		"deleteToken": deleteToken,
+		"url":         "/link/" + transferId,
 	})
 }
 
@@ -326,4 +331,43 @@ func DownloadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+targetFile.Name+"\"")
 	w.Header().Set("Content-Type", targetFile.MimeType)
 	http.ServeFile(w, r, filePath)
+}
+
+// DeleteTransfer handles DELETE /api/transfers/{id}
+func DeleteTransfer(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	reqToken := r.Header.Get("X-Delete-Token")
+
+	transfer, err := database.GetTransfer(id)
+	if err != nil {
+		respondWithJSON(w, http.StatusNotFound, map[string]string{"error": "Transfert introuvable."})
+		return
+	}
+
+	// Validate ownership via DeleteToken
+	// For legacy transfers, transfer.DeleteToken is empty, so we allow deletion without/with any token.
+	if transfer.DeleteToken != "" && transfer.DeleteToken != reqToken {
+		respondWithJSON(w, http.StatusUnauthorized, map[string]string{"error": "Action non autorisée. Jeton de suppression invalide."})
+		return
+	}
+
+	// Physically delete files from the disk
+	for _, file := range transfer.Files {
+		filePath := filepath.Join(config.UploadsDir, file.Filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Erreur de suppression physique du fichier %s: %v", filePath, err)
+		}
+	}
+
+	// Remove from database
+	_, err = database.DeleteTransfer(id)
+	if err != nil {
+		respondWithJSON(w, http.StatusInternalServerError, map[string]string{"error": "Impossible de supprimer le transfert de la base de données."})
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Le transfert a été supprimé avec succès.",
+	})
 }

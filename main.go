@@ -39,6 +39,7 @@ func main() {
 	r.Get("/api/transfers/{id}", handlers.GetTransferMetadata)
 	r.Post("/api/transfers/{id}/unlock", handlers.UnlockTransfer)
 	r.Get("/api/transfers/{id}/files/{fileId}", handlers.DownloadFile)
+	r.Delete("/api/transfers/{id}", handlers.DeleteTransfer)
 
 	// Web Routes: Serve share.html for clean link URLs
 	r.Get("/link/{id}", func(w http.ResponseWriter, r *http.Request) {

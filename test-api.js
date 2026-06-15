@@ -40,6 +40,37 @@ function postJSON(url, body) {
   });
 }
 
+// Helper function to perform HTTP DELETE requests
+function deleteJSON(url, token) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = http.request({
+      hostname: u.hostname,
+      port: u.port,
+      path: u.pathname,
+      method: 'DELETE',
+      headers: {
+        'X-Delete-Token': token || ''
+      }
+    }, (res) => {
+      let responseData = '';
+      res.on('data', chunk => responseData += chunk);
+      res.on('end', () => {
+        try {
+          resolve({
+            status: res.statusCode,
+            data: JSON.parse(responseData)
+          });
+        } catch (e) {
+          resolve({ status: res.statusCode, data: responseData });
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // Helper function to perform HTTP GET requests
 function getJSON(url) {
   return new Promise((resolve, reject) => {
@@ -220,7 +251,31 @@ async function runTests() {
     if (pendMeta.data.status !== 'pending') {
       throw new Error(`❌ Pending check failed: Status is ${pendMeta.data.status}`);
     }
-    console.log('✔ Pending link identified and blocked server-side!', pendMeta.data);
+    // 9. Verify Delete Transfer
+    console.log('\n[TEST 9] Verifying Delete Transfer...');
+    const deleteId = createRes.data.transferId;
+    const correctToken = createRes.data.deleteToken;
+
+    console.log(' - Deleting with INCORRECT token...');
+    const badDelete = await deleteJSON(`${BASE_URL}/api/transfers/${deleteId}`, 'wrong-token');
+    if (badDelete.status !== 401) {
+      throw new Error(`❌ Security failure: Server allowed delete with wrong token (Status: ${badDelete.status})`);
+    }
+    console.log('  ✔ Blocked wrong token correctly.');
+
+    console.log(' - Deleting with CORRECT token...');
+    const goodDelete = await deleteJSON(`${BASE_URL}/api/transfers/${deleteId}`, correctToken);
+    if (goodDelete.status !== 200) {
+      throw new Error(`❌ Delete failed with correct token (Status: ${goodDelete.status})`);
+    }
+    console.log('  ✔ Delete request returned 200 OK.');
+
+    console.log(' - Verifying metadata returns 404...');
+    const deletedMeta = await getJSON(`${BASE_URL}/api/transfers/${deleteId}`);
+    if (deletedMeta.status !== 404) {
+      throw new Error(`❌ Security failure: Deleted transfer metadata still accessible (Status: ${deletedMeta.status})`);
+    }
+    console.log('  ✔ Transfer is indeed gone from DB.');
 
     console.log('\n=============================================');
     console.log('🎉 ALL API VERIFICATION TESTS PASSED SUCCESSFULLY! 🎉');

@@ -33,6 +33,7 @@ type Transfer struct {
 	EndDate      *time.Time     `json:"endDate"`
 	CreatedAt    time.Time      `json:"createdAt"`
 	Files        []FileMetadata `json:"files"`
+	DeleteToken  string         `json:"deleteToken"`
 }
 
 // DBRepresentation is the root JSON database structure
@@ -120,6 +121,28 @@ func GetTransfer(id string) (Transfer, error) {
 	transfer, exists := db.Transfers[id]
 	if !exists {
 		return Transfer{}, errors.New("transfer not found")
+	}
+
+	return transfer, nil
+}
+
+// DeleteTransfer removes a transfer record by ID and returns the deleted transfer metadata
+func DeleteTransfer(id string) (Transfer, error) {
+	transfer, err := GetTransfer(id)
+	if err != nil {
+		return Transfer{}, err
+	}
+
+	db, err := ReadDatabase()
+	if err != nil {
+		return Transfer{}, err
+	}
+
+	delete(db.Transfers, id)
+
+	err = WriteDatabase(db)
+	if err != nil {
+		return Transfer{}, err
 	}
 
 	return transfer, nil

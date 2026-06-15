@@ -79,3 +79,26 @@ export async function unlockTransfer(id, password) {
 
   return res.json();
 }
+
+/**
+ * API Wrapper: Deletes a transfer using its ID and secret delete token
+ * @param {string} id Unique ID or custom slug
+ * @param {string} deleteToken Secret authorization token
+ * @returns {Promise<object>} Success JSON payload
+ */
+export async function deleteTransfer(id, deleteToken) {
+  const res = await fetch(`/api/transfers/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Delete-Token': deleteToken || ''
+    }
+  });
+
+  if (!res.ok) {
+    const errorPayload = await res.json().catch(() => ({}));
+    throw new Error(errorPayload.error || `Erreur lors de la suppression (${res.status})`);
+  }
+
+  return res.json();
+}
